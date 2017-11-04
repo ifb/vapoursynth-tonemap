@@ -5,7 +5,10 @@
  *     Copyright (C) 2017 Phillip Blucas
  *
  * Hable ported from vf_tonemap
- *     Copyright (c) 2017 Vittorio Giovara
+ *     Copyright (C) 2017 Vittorio Giovara
+ *
+ * Mobius ported from mpv and vf_tonemap
+ *     Copyright (C) 2017 Niklas Haas
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -141,6 +144,112 @@ static void VS_CC hableCreate( const VSMap *in, VSMap *out, void *userData, VSCo
     vsapi->createFilter( in, out, "Hable", hableInit, hableGetFrame, hableFree, fmParallel, 0, data, core );
 }
 
+typedef struct {
+    VSNodeRef *node;
+    const VSVideoInfo *vi;
+    float exposure;
+    float transition;
+    double peak;
+} MobiusData;
+
+static void VS_CC mobiusInit( VSMap *in, VSMap *out, void **instanceData, VSNode *node, VSCore *core, const VSAPI *vsapi )
+{
+    MobiusData *d = (MobiusData *) * instanceData;
+    vsapi->setVideoInfo( d->vi, 1, node );
+}
+
+static float mobius( float in, float j, double peak )
+{
+    float a, b;
+
+    if( in <= j )
+        return in;
+
+    a = -j * j * ( peak - 1.0f ) / ( j * j - 2.0f * j + peak );
+    b = ( j * j - 2.0f * j * peak + peak ) / VSMAX( peak - 1.0f, 1e-6 );
+
+    return ( b * b + 2.0f * b * j + j * j ) / ( b - a ) * ( in + a ) / ( in + b );
+}
+
+static const VSFrameRef *VS_CC mobiusGetFrame( int n, int activationReason, void **instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi )
+{
+    MobiusData *d = (MobiusData *) * instanceData;
+    if( activationReason == arInitial )
+    {
+        vsapi->requestFrameFilter( n, d->node, frameCtx );
+    }
+    else if( activationReason == arAllFramesReady )
+    {
+        const VSFrameRef *src = vsapi->getFrameFilter( n, d->node, frameCtx );
+        const VSFormat *fi = d->vi->format;
+
+        int height = vsapi->getFrameHeight( src, 0 );
+        int width = vsapi->getFrameWidth( src, 0 );
+        VSFrameRef *dst = vsapi->newVideoFrame( fi, width, height, src, core );
+
+        for( int plane = 0; plane < fi->numPlanes; plane++ )
+        {
+            const float *srcp = (float *)vsapi->getReadPtr( src, plane );
+            float *dstp = (float *)vsapi->getWritePtr( dst, plane );
+            int h = vsapi->getFrameHeight( src, plane );
+            int w = vsapi->getFrameWidth( src, plane );
+            intptr_t stride = vsapi->getStride( src, plane ) / sizeof(float);
+
+            const float exposure = d->exposure;
+            const float transition = d->transition;
+            const double peak = d->peak;
+            for( int y = 0; y < h; y++ )
+            {
+                for( int x = 0; x < w; x++ )
+                    dstp[x] = mobius( exposure * srcp[x], transition, peak );
+                dstp += stride;
+                srcp += stride;
+            }
+        }
+        vsapi->freeFrame( src );
+        return dst;
+    }
+    return 0;
+}
+
+static void VS_CC mobiusFree( void *instanceData, VSCore *core, const VSAPI *vsapi )
+{
+    MobiusData *d = (MobiusData *)instanceData;
+    vsapi->freeNode( d->node );
+    free( d );
+}
+
+static void VS_CC mobiusCreate( const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi )
+{
+    MobiusData d;
+    MobiusData *data;
+    int err = 0;
+
+    d.node = vsapi->propGetNode( in, "clip", 0, 0 );
+    d.vi = vsapi->getVideoInfo( d.node );
+
+    d.exposure = vsapi->propGetFloat( in, "exposure", 0, &err );
+    if( err )
+        d.exposure = 2.0;
+    d.transition = vsapi->propGetFloat( in, "transition", 0, &err );
+    if( err )
+        d.transition = 0.3;
+    d.peak = vsapi->propGetFloat( in, "peak", 0, &err );
+    if( err )
+        d.peak = 1.0;
+
+    data = malloc( sizeof(d) );
+    *data = d;
+
+    if( !isConstantFormat(d.vi) || d.vi->format->sampleType == stInteger || d.vi->format->bytesPerSample != 4 )
+    {
+        vsapi->setError( out, "Mobius: only constant format 32 bit float input supported" );
+        vsapi->freeNode( d.node );
+        return;
+    }
+    vsapi->createFilter( in, out, "Mobius", mobiusInit, mobiusGetFrame, mobiusFree, fmParallel, 0, data, core );
+}
+
 VS_EXTERNAL_API(void) VapourSynthPluginInit( VSConfigPlugin configFunc, VSRegisterFunction registerFunc, VSPlugin *plugin )
 {
     configFunc( "com.ifb.tonemap", "tonemap", "Simple tone mapping for VapourSynth", VAPOURSYNTH_API_VERSION, 1, plugin );
@@ -155,4 +264,10 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit( VSConfigPlugin configFunc, VSRegist
                   "f:float:opt;"
                   "w:float:opt;",
                   hableCreate, 0, plugin );
+    registerFunc( "Mobius",
+                  "clip:clip;"
+                  "exposure:float:opt;"
+                  "transition:float:opt;"
+                  "peak:float:opt;",
+                  mobiusCreate, 0, plugin );
 }
