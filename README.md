@@ -15,6 +15,8 @@ Hable
 
     tonemap.Hable(clip clip[, float exposure=2.0, float a=0.15, float b=0.50, float c=0.10, float d=0.20, float e=0.02, float f=0.30, float w=11.2])
 
+Peserve both dark and bright details better than Reinhard, at the cost of slightly darkening everything. Use it when detail preservation is more important than color and brightness accuracy.
+
 * clip: Clip to process. Only planar 32-bit float is supported.
 
 * exposure: Gain to apply.
@@ -45,7 +47,7 @@ References:
 Mobius
 ===
 
-    tonemap.Mobius(clip clip[, float exposure=2.0, float a=0.15, float b=0.50, float c=0.10, float d=0.20, float e=0.02, float f=0.30, float w=11.2])
+    tonemap.Mobius(clip clip[, float exposure=2.0, float transition=0.3])
 
 Generalization of Reinhard to a Mobius transform with linear section. Smoothly maps out-of-range values while retaining contrast and colors for in-range material as much as possible. Use this when you care about color accuracy more than detail preservation.
 
