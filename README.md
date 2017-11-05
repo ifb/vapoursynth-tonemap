@@ -63,6 +63,20 @@ Generalization of Reinhard to a Mobius transform with linear section. Smoothly m
 References:
 <https://github.com/mpv-player/mpv/commit/d8a3b10f45eb10fb34ce9da3a9a76e3bd8644e3d>
 
+Reinhard
+===
+
+    tonemap.Reinhard(clip clip[, float exposure=2.0, contrast=0.5])
+
+* clip: Clip to process. Only planar 32-bit float is supported.
+
+* exposure: Gain to apply.
+
+* contrast: Controls the local contrast coefficient at the display peak. Default to 0.5, which means that in-gamut values will be about half as bright as when clipping.
+
+#####
+References:
+<https://www.cs.utah.edu/~reinhard/cdrom/>
 
 Compilation
 ===========

@@ -250,6 +250,96 @@ static void VS_CC mobiusCreate( const VSMap *in, VSMap *out, void *userData, VSC
     vsapi->createFilter( in, out, "Mobius", mobiusInit, mobiusGetFrame, mobiusFree, fmParallel, 0, data, core );
 }
 
+typedef struct {
+    VSNodeRef *node;
+    const VSVideoInfo *vi;
+    float exposure, contrast, peak;
+} ReinhardData;
+
+static void VS_CC reinhardInit( VSMap *in, VSMap *out, void **instanceData, VSNode *node, VSCore *core, const VSAPI *vsapi )
+{
+    ReinhardData *d = (ReinhardData *) * instanceData;
+    vsapi->setVideoInfo( d->vi, 1, node );
+}
+
+static const VSFrameRef *VS_CC reinhardGetFrame( int n, int activationReason, void **instanceData, void **frameData, VSFrameContext *frameCtx, VSCore *core, const VSAPI *vsapi )
+{
+    ReinhardData *d = (ReinhardData *) * instanceData;
+    if( activationReason == arInitial )
+    {
+        vsapi->requestFrameFilter( n, d->node, frameCtx );
+    }
+    else if( activationReason == arAllFramesReady )
+    {
+        const VSFrameRef *src = vsapi->getFrameFilter( n, d->node, frameCtx );
+        const VSFormat *fi = d->vi->format;
+
+        int height = vsapi->getFrameHeight( src, 0 );
+        int width = vsapi->getFrameWidth( src, 0 );
+        VSFrameRef *dst = vsapi->newVideoFrame( fi, width, height, src, core );
+
+        for( int plane = 0; plane < fi->numPlanes; plane++ )
+        {
+            const float *srcp = (float *)vsapi->getReadPtr( src, plane );
+            float *dstp = (float *)vsapi->getWritePtr( dst, plane );
+            int h = vsapi->getFrameHeight( src, plane );
+            int w = vsapi->getFrameWidth( src, plane );
+            intptr_t stride = vsapi->getStride( src, plane ) / sizeof(float);
+
+            const double offset = ( 1.0 - d->contrast ) / d->contrast;
+            const double peak = d->peak;
+            for( int y = 0; y < h; y++ )
+            {
+                for( int x = 0; x < w; x++ )
+                    dstp[x] = srcp[x] / ( srcp[x] + offset ) * ( peak + offset ) / peak;
+                dstp += stride;
+                srcp += stride;
+            }
+        }
+        vsapi->freeFrame( src );
+        return dst;
+    }
+    return 0;
+}
+
+static void VS_CC reinhardFree( void *instanceData, VSCore *core, const VSAPI *vsapi )
+{
+    ReinhardData *d = (ReinhardData *)instanceData;
+    vsapi->freeNode( d->node );
+    free( d );
+}
+
+static void VS_CC reinhardCreate( const VSMap *in, VSMap *out, void *userData, VSCore *core, const VSAPI *vsapi )
+{
+    ReinhardData d;
+    ReinhardData *data;
+    int err = 0;
+
+    d.node = vsapi->propGetNode( in, "clip", 0, 0 );
+    d.vi = vsapi->getVideoInfo( d.node );
+
+    d.exposure = vsapi->propGetFloat( in, "exposure", 0, &err );
+    if( err )
+        d.exposure = 2.0;
+    d.contrast = vsapi->propGetFloat( in, "contrast", 0, &err );
+    if( err )
+        d.contrast = 0.5;
+    d.peak = vsapi->propGetFloat( in, "peak", 0, &err );
+    if( err )
+        d.peak = 1.0;
+
+    data = malloc( sizeof(d) );
+    *data = d;
+
+    if( !isConstantFormat(d.vi) || d.vi->format->sampleType == stInteger || d.vi->format->bytesPerSample != 4 )
+    {
+        vsapi->setError( out, "Reinhard: only constant format 32 bit float input supported" );
+        vsapi->freeNode( d.node );
+        return;
+    }
+    vsapi->createFilter( in, out, "Reinhard", reinhardInit, reinhardGetFrame, reinhardFree, fmParallel, 0, data, core );
+}
+
 VS_EXTERNAL_API(void) VapourSynthPluginInit( VSConfigPlugin configFunc, VSRegisterFunction registerFunc, VSPlugin *plugin )
 {
     configFunc( "com.ifb.tonemap", "tonemap", "Simple tone mapping for VapourSynth", VAPOURSYNTH_API_VERSION, 1, plugin );
@@ -270,4 +360,10 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit( VSConfigPlugin configFunc, VSRegist
                   "transition:float:opt;"
                   "peak:float:opt;",
                   mobiusCreate, 0, plugin );
+    registerFunc( "Reinhard",
+                  "clip:clip;"
+                  "exposure:float:opt;"
+                  "contrast:float:opt;"
+                  "peak:float:opt;",
+                  reinhardCreate, 0, plugin );
 }
