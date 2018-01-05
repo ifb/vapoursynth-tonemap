@@ -47,7 +47,7 @@ References:
 Mobius
 ===
 
-    tonemap.Mobius(clip clip[, float exposure=2.0, float transition=0.3])
+    tonemap.Mobius(clip clip[, float exposure=2.0, float transition=0.3, float peak=1.0])
 
 Generalization of Reinhard to a Mobius transform with linear section. Smoothly maps out-of-range values while retaining contrast and colors for in-range material as much as possible. Use this when you care about color accuracy more than detail preservation.
 
@@ -66,13 +66,15 @@ References:
 Reinhard
 ===
 
-    tonemap.Reinhard(clip clip[, float exposure=2.0, contrast=0.5])
+    tonemap.Reinhard(clip clip[, float exposure=2.0, contrast=0.5, float peak=1.0])
 
 * clip: Clip to process. Only planar 32-bit float is supported.
 
 * exposure: Gain to apply.
 
 * contrast: Controls the local contrast coefficient at the display peak. Default to 0.5, which means that in-gamut values will be about half as bright as when clipping.
+
+* peak: Reference peak brightness
 
 #####
 References:
@@ -87,7 +89,7 @@ The usual autotools method:
 make
 ```
 
-On Mingw-64 you can try something like the following:
+On Mingw-w64 you can try something like the following:
 ```
 gcc -c tonemap.c -I include/vapoursynth -O3 -ffast-math -mfpmath=sse -msse2 -march=native -std=c99 -Wall
 gcc -shared -o tonemap.dll tonemap.o -Wl,--out-implib,tonemap.a
