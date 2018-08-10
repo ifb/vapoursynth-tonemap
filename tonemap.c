@@ -4,7 +4,7 @@
  * VapourSynth plugin
  *     Copyright (C) 2017 Phillip Blucas
  *
- * Hable ported from vf_tonemap
+ * Hable and Reinhard ported from vf_tonemap
  *     Copyright (C) 2017 Vittorio Giovara
  *
  * Mobius ported from mpv and vf_tonemap
@@ -286,12 +286,13 @@ static const VSFrameRef *VS_CC reinhardGetFrame( int n, int activationReason, vo
             int w = vsapi->getFrameWidth( src, plane );
             intptr_t stride = vsapi->getStride( src, plane ) / sizeof(float);
 
-            const double offset = ( 1.0 - d->contrast ) / d->contrast;
-            const double peak = d->peak;
+            const float offset = ( 1.0 - d->contrast ) / d->contrast;
+            const float peak = d->peak;
+            const float gain = d->exposure;
             for( int y = 0; y < h; y++ )
             {
                 for( int x = 0; x < w; x++ )
-                    dstp[x] = srcp[x] / ( srcp[x] + offset ) * ( peak + offset ) / peak;
+                    dstp[x] = srcp[x] * gain / ( srcp[x] * gain + offset ) * ( peak + offset ) / peak;
                 dstp += stride;
                 srcp += stride;
             }
@@ -320,7 +321,7 @@ static void VS_CC reinhardCreate( const VSMap *in, VSMap *out, void *userData, V
 
     d.exposure = vsapi->propGetFloat( in, "exposure", 0, &err );
     if( err )
-        d.exposure = 2.0;
+        d.exposure = 1.5;
     d.contrast = vsapi->propGetFloat( in, "contrast", 0, &err );
     if( err )
         d.contrast = 0.5;

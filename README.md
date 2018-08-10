@@ -66,7 +66,7 @@ References:
 Reinhard
 ===
 
-    tonemap.Reinhard(clip clip[, float exposure=2.0, contrast=0.5, float peak=1.0])
+    tonemap.Reinhard(clip clip[, float exposure=1.5, contrast=0.5, float peak=1.0])
 
 * clip: Clip to process. Only planar 32-bit float is supported.
 
